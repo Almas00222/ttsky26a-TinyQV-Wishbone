@@ -1,0 +1,55 @@
+name: signoff
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  signoff:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Install system packages
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iverilog verilator yosys z3 boolector symbiyosys
+
+      - name: Setup python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install Python packages
+        shell: bash
+        run: pip install -r test/requirements.txt
+
+      - name: Run signoff verification
+        shell: bash
+        run: |
+          make test-golden
+          make test-rtl
+          make test-comprehensive
+          make synth-gate-netlist
+          make test-gatelevel-smoke
+          make lint-iverilog
+          make lint-verilator
+          make formal-qspi
+          make formal-wb-bridge
+
+      - name: Upload signoff artifacts
+        if: success() || failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: signoff-artifacts
+          path: |
+            docs/signoff_checklist.md
+            docs/bringup_checklist.md
+            docs/lint_waivers.md
+            test/results.xml
+            test/tb.fst
+            formal/*/*

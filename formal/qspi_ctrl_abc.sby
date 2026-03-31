@@ -1,0 +1,13 @@
+[options]
+mode bmc
+depth 65
+
+[engines]
+abc bmc3
+
+[script]
+read -formal qspi_ctrl.v
+prep -top qspi_controller
+
+[files]
+src/TinyQV/qspi_ctrl.v

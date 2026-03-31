@@ -1,0 +1,13 @@
+[options]
+mode prove
+depth 64
+
+[engines]
+smtbmc boolector
+
+[script]
+read -formal qspi_ctrl.v
+prep -top qspi_controller
+
+[files]
+src/TinyQV/qspi_ctrl.v

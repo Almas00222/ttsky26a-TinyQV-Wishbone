@@ -1,0 +1,13 @@
+[options]
+mode prove
+depth 64
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal qspi_ctrl.v
+prep -top qspi_controller
+
+[files]
+src/TinyQV/qspi_ctrl.v

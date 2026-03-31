@@ -1,0 +1,12 @@
+[options]
+mode prove
+
+[engines]
+abc pdr
+
+[script]
+read -formal wb_bridge.v
+prep -top tinyqv_wb_bridge
+
+[files]
+src/TinyQV/wb_bridge.v
