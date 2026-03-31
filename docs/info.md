@@ -65,6 +65,8 @@ Clocking:
 
 - Project clock is configured for 50 MHz (`clock_hz: 50000000` in `info.yaml`).
 - TinyTapeout hardening timing is aligned to this (`CLOCK_PERIOD: 20` ns in `src/config.json`).
+- The project footprint is configured as a `6x2` Tiny Tapeout macro because the
+  full TinyQV + Wishbone + UART16550 + GPIO SoC does not fit in a single tile.
 
 ## How to test
 
