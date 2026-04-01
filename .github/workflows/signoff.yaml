@@ -17,7 +17,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y iverilog verilator yosys z3 boolector symbiyosys
+          sudo apt-get install -y iverilog verilator yosys z3 boolector build-essential
 
       - name: Setup python
         uses: actions/setup-python@v6
@@ -26,7 +26,14 @@ jobs:
 
       - name: Install Python packages
         shell: bash
-        run: pip install -r test/requirements.txt
+        run: pip install -r test/requirements.txt click
+
+      - name: Install SymbiYosys
+        shell: bash
+        run: |
+          git clone --depth 1 https://github.com/YosysHQ/sby.git /tmp/sby
+          cd /tmp/sby
+          sudo make install PREFIX=/usr/local
 
       - name: Run signoff verification
         shell: bash

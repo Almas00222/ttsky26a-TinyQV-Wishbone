@@ -1,6 +1,6 @@
 # Tapeout Signoff Checklist
 
-Status date: 2026-03-31
+Status date: 2026-04-01
 
 Current blocker:
 
@@ -54,7 +54,7 @@ Final Tiny Tapeout gates:
 - GDS built from the exact submission commit
 - Tiny Tapeout precheck green
 - Full GL regression green on the staged post-layout netlist
-- Timing met at 20 ns
+- Timing met at 25 ns
 - DRC clean
 - LVS clean
 - No unresolved antenna or power issues

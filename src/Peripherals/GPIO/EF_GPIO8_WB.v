@@ -51,7 +51,10 @@ module EF_GPIO8_WB (
   reg [0:0] GCLK_REG;
   wire clk_g;
 
-  wire clk_gated_en = GCLK_REG[0];
+  // Keep the register for software compatibility, but avoid synthesizing a
+  // generated local clock. The original gate created a fatal clock-gating
+  // hold check in Tiny Tapeout hardening.
+  wire clk_gated_en = 1'b1;
   ef_util_gating_cell clk_gate_cell (
 
       // USE_POWER_PINS

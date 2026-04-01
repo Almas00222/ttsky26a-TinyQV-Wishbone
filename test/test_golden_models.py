@@ -125,7 +125,7 @@ class TestUART16550Model(unittest.TestCase):
     """Tests for UART model."""
     
     def setUp(self):
-        self.uart = UART16550Model(clock_freq_hz=50_000_000)
+        self.uart = UART16550Model(clock_freq_hz=40_000_000)
         
     def test_reset(self):
         """Test reset state."""
@@ -138,7 +138,7 @@ class TestUART16550Model(unittest.TestCase):
         """Test baud rate divisor."""
         # Enable DLAB
         self.uart.write_register(UARTRegister.LCR, 0x80)
-        self.uart.write_register(UARTRegister.DLL, 27)
+        self.uart.write_register(UARTRegister.DLL, 22)
         self.uart.write_register(UARTRegister.DLM, 0)
         
         baud = self.uart.get_baud_rate()

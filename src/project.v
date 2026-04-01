@@ -58,7 +58,7 @@ module tt_um_TSARKA_TinyQV (
     wire       cpu_debug_stop_txn;
 
     tinyqv_soc_top #(
-        .CLOCK_MHZ(50)
+        .CLOCK_MHZ(40)
     ) i_soc (
         .clk                        (clk),
         .rstn                       (rst_n),
@@ -136,7 +136,7 @@ module tt_um_TSARKA_TinyQV (
 endmodule
 
 module tinyqv_soc_top #(
-    parameter CLOCK_MHZ = 50
+    parameter CLOCK_MHZ = 40
 ) (
     input  wire        clk,
     input  wire        rstn,

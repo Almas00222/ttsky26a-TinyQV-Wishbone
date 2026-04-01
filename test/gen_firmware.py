@@ -20,6 +20,10 @@ UART_LSR = 0x14
 
 CSR_MIE = 0x304
 
+SYSTEM_CLOCK_HZ = 40_000_000
+UART_BAUD = 115_200
+UART_DIVISOR = (SYSTEM_CLOCK_HZ + (UART_BAUD * 8)) // (UART_BAUD * 16)
+
 
 def lui(rd, imm20):
     return ((imm20 & 0xFFFFF) << 12) | ((rd & 0x1F) << 7) | 0x37
@@ -171,7 +175,7 @@ def setup_uart_115200(prog):
     prog.inst(lui(10, UART_BASE >> 12))
     prog.inst(addi(2, 0, 0x80))
     prog.inst(sw(2, 10, UART_LCR))
-    prog.inst(addi(2, 0, 27))
+    prog.inst(addi(2, 0, UART_DIVISOR))
     prog.inst(sw(2, 10, UART_THR))
     prog.inst(sw(0, 10, UART_IER))
     prog.inst(addi(2, 0, 0x03))

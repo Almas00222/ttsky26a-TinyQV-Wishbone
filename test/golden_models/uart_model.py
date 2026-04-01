@@ -100,7 +100,7 @@ class UART16550Model:
     
     FIFO_DEPTH = 16
     
-    def __init__(self, clock_freq_hz: int = 50_000_000):
+    def __init__(self, clock_freq_hz: int = 40_000_000):
         self.clock_freq = clock_freq_hz
         self.reset()
         
@@ -546,7 +546,7 @@ class UARTBitBangModel:
     Bit-bang UART model for generating/verifying serial waveforms.
     """
     
-    def __init__(self, baud_rate: int = 115200, clock_freq: int = 50_000_000):
+    def __init__(self, baud_rate: int = 115200, clock_freq: int = 40_000_000):
         self.baud_rate = baud_rate
         self.clock_freq = clock_freq
         self.bit_time_ns = int(1e9 / baud_rate)
