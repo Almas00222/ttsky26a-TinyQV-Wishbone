@@ -98,6 +98,8 @@ module tinyqv_wb_bridge (
     // (Note: If your CPU expects read data to be shifted to LSB, you would add a MUX here)
         
     reg [31:0] cpu_data_in_reg;
+    reg [6:0]  timeout_cnt;
+    reg        timeout_triggered;
 
     always @(posedge clk) begin
         if (wb_ack_i)
@@ -112,8 +114,6 @@ module tinyqv_wb_bridge (
     // --------------------------------------------------------
     // 5. Watchdog Timer & Handshake
     // --------------------------------------------------------
-    reg [6:0] timeout_cnt;
-    reg       timeout_triggered;
 
     always @(posedge clk or negedge rstn) begin
         if (!rstn) begin
