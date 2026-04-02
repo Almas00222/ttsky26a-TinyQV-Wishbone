@@ -66,6 +66,7 @@ GL_POWER_DEFINE := $(shell python3 $(TEST_DIR)/gate_level_tools.py netlist-has-p
 GL_COMPILE_ARGS := $(BASE_COMPILE_ARGS) -DGL_TEST -DFUNCTIONAL -DUNIT_DELAY=\#1
 ifeq ($(strip $(GL_POWER_DEFINE)),1)
 GL_COMPILE_ARGS += -DGL_USE_POWER_PINS
+GL_COMPILE_ARGS += -DUSE_POWER_PINS
 endif
 GL_VERILOG_SOURCES := $(SKY130_SIM_MODELS) $(TEST_DIR)/gate_level_netlist.v $(TEST_DIR)/tb.v $(TEST_DIR)/sim_qspi_soc.v
 
