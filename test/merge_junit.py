@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import copy
 import sys
 import xml.etree.ElementTree as ET
 
@@ -47,7 +48,8 @@ def main(argv):
     if len(argv) < 2:
         raise SystemExit("usage: merge_junit.py <results1.xml> <results2.xml> ...")
 
-    merged = ET.Element("testsuites")
+    merged = ET.Element("testsuites", {"name": "results"})
+    merged_suite = ET.SubElement(merged, "testsuite", {"name": "all", "package": "all"})
     counts = {name: 0 for name in COUNT_ATTRS}
     times = {name: 0.0 for name in TIME_ATTRS}
 
@@ -55,7 +57,8 @@ def main(argv):
         root = ET.parse(path).getroot()
         for suite in iter_suites(root):
             suite_counts = normalize_suite_attrs(suite)
-            merged.append(suite)
+            for testcase in suite.findall("testcase"):
+                merged_suite.append(copy.deepcopy(testcase))
             for name in COUNT_ATTRS:
                 counts[name] += suite_counts[name]
             for name in TIME_ATTRS:
@@ -63,8 +66,10 @@ def main(argv):
 
     for name, value in counts.items():
         merged.set(name, str(value))
+        merged_suite.set(name, str(value))
     for name, value in times.items():
         merged.set(name, f"{value:.6f}")
+        merged_suite.set(name, f"{value:.6f}")
 
     ET.ElementTree(merged).write(sys.stdout.buffer, encoding="utf-8", xml_declaration=True)
 
