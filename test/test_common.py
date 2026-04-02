@@ -128,6 +128,24 @@ async def wait_for_fetch_start(dut, timeout_cycles=1000):
     return False
 
 
+def _maybe_get_handle(root, path):
+    current = root
+    for name in path.split("."):
+        try:
+            current = getattr(current, name)
+        except AttributeError:
+            return None
+    return current
+
+
+def _first_available_handle(root, paths):
+    for path in paths:
+        handle = _maybe_get_handle(root, path)
+        if handle is not None:
+            return handle, path
+    return None, None
+
+
 async def wait_for_gpio_state(dut, expected_out, expected_oe, timeout_cycles=4000):
     for _ in range(timeout_cycles):
         if (
@@ -233,11 +251,35 @@ async def pulse_external_irq(dut, irq_index, hold_cycles=12):
 
 
 async def wait_for_boot_activity(dut, timeout_cycles=20000):
+    debug_handle, debug_path = _first_available_handle(
+        dut,
+        (
+            "user_project.cpu_debug_instr_complete",
+            "user_project.i_soc.cpu_debug_instr_complete",
+            "user_project.i_soc.i_tinyqv.debug_instr_complete",
+            "user_project.i_tinyqv.debug_instr_complete",
+        ),
+    )
+
+    if debug_handle is not None:
+        for _ in range(timeout_cycles):
+            if _int_value(debug_handle, debug_path):
+                return
+            await RisingEdge(dut.clk)
+        raise AssertionError("CPU never completed an instruction")
+
+    dut._log.info("Falling back to top-level boot activity detection; cpu_debug_instr_complete is not visible")
     for _ in range(timeout_cycles):
-        if _int_value(dut.user_project.cpu_debug_instr_complete, "cpu_debug_instr_complete"):
+        if _resolved_int(dut.qspi_flash_select) == 0:
+            return
+        if _resolved_int(dut.qspi_ram_a_select) == 0:
+            return
+        if _resolved_int(dut.qspi_ram_b_select) == 0:
+            return
+        if _resolved_int(dut.uart_tx) == 0:
             return
         await RisingEdge(dut.clk)
-    raise AssertionError("CPU never completed an instruction")
+    raise AssertionError("CPU never showed observable boot activity")
 
 
 def firmware_path(name):

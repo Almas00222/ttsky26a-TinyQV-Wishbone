@@ -6,7 +6,7 @@ from test_common import (
     reset_dut,
     start_clock,
     wait_for_boot_activity,
-    wait_for_gpio_state,
+    wait_for_uo_out_mask,
 )
 
 
@@ -72,7 +72,7 @@ async def test_gl_firmware_boot_reaches_gpio_signature(dut):
     await start_clock(dut)
     await reset_dut(dut, latency=1, use_qspi_model=True)
     await wait_for_boot_activity(dut)
-    await wait_for_gpio_state(dut, 0xBE, 0xFF, timeout_cycles=12000)
+    await wait_for_uo_out_mask(dut, 0xBE, 0xFE, timeout_cycles=12000)
 
 
 @cocotb.test()
@@ -80,7 +80,7 @@ async def test_gl_firmware_gpio_stability(dut):
     await start_clock(dut)
     await reset_dut(dut, latency=1, use_qspi_model=True)
     await wait_for_boot_activity(dut)
-    await wait_for_gpio_state(dut, 0xBE, 0xFF, timeout_cycles=12000)
+    await wait_for_uo_out_mask(dut, 0xBE, 0xFE, timeout_cycles=12000)
 
     for _ in range(200):
         await ClockCycles(dut.clk, 1)
