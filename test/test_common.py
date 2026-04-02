@@ -53,6 +53,13 @@ def _int_value(signal, name):
     return int(value)
 
 
+def _resolved_int(signal):
+    value = signal.value
+    if not value.is_resolvable:
+        return None
+    return int(value)
+
+
 def encode_lui(rd, imm20):
     return ((imm20 & 0xFFFFF) << 12) | ((rd & 0x1F) << 7) | 0x37
 
@@ -64,6 +71,22 @@ def encode_nop():
 def sign_extend_12(value):
     value &= 0xFFF
     return value - 0x1000 if value & 0x800 else value
+
+
+def mask_u32(value):
+    return value & 0xFFFFFFFF
+
+
+def as_signed32(value):
+    value = mask_u32(value)
+    return value - 0x1_0000_0000 if value & 0x8000_0000 else value
+
+
+def split_lui_addi(value):
+    value = mask_u32(value)
+    upper = (value + 0x800) >> 12
+    lower = sign_extend_12((value - ((upper & 0xFFFFF) << 12)) & 0xFFF)
+    return upper & 0xFFFFF, lower
 
 
 async def start_clock(dut):
@@ -92,9 +115,14 @@ async def reset_dut(dut, latency=1, use_qspi_model=False, ui_in=0x80):
     await ClockCycles(dut.clk, 1)
 
 
+async def begin_manual_qspi_session(dut, latency=1, ui_in=0x80):
+    await reset_dut(dut, latency=latency, use_qspi_model=False, ui_in=ui_in)
+    await start_read(dut, 0)
+
+
 async def wait_for_fetch_start(dut, timeout_cycles=1000):
     for _ in range(timeout_cycles):
-        if _int_value(dut.qspi_flash_select, "qspi_flash_select") == 0:
+        if _resolved_int(dut.qspi_flash_select) == 0:
             return True
         await ClockCycles(dut.clk, 1)
     return False
@@ -145,8 +173,8 @@ async def wait_for_uart_start(dut, timeout_ns=5_000_000):
     raise AssertionError("UART start bit timeout")
 
 
-async def capture_uart_byte(dut, bit_time_ns=BIT_TIME_115200_NS):
-    await wait_for_uart_start(dut)
+async def capture_uart_byte(dut, bit_time_ns=BIT_TIME_115200_NS, start_timeout_ns=5_000_000):
+    await wait_for_uart_start(dut, timeout_ns=start_timeout_ns)
     await Timer(bit_time_ns / 2, units="ns")
     assert _int_value(dut.uart_tx, "uart_tx") == 0, "Expected UART start bit"
 
@@ -160,9 +188,19 @@ async def capture_uart_byte(dut, bit_time_ns=BIT_TIME_115200_NS):
     return value
 
 
-async def capture_uart_string(dut, text, bit_time_ns=BIT_TIME_115200_NS):
-    for char in text:
-        received = await capture_uart_byte(dut, bit_time_ns=bit_time_ns)
+async def capture_uart_string(
+    dut,
+    text,
+    bit_time_ns=BIT_TIME_115200_NS,
+    first_start_timeout_ns=5_000_000,
+    inter_byte_timeout_ns=5_000_000,
+):
+    for idx, char in enumerate(text):
+        received = await capture_uart_byte(
+            dut,
+            bit_time_ns=bit_time_ns,
+            start_timeout_ns=first_start_timeout_ns if idx == 0 else inter_byte_timeout_ns,
+        )
         assert received == ord(char), f"Expected {char!r}, got 0x{received:02X}"
 
 
@@ -226,7 +264,7 @@ def current_instr_fetch_addr(dut):
         return None
 
 
-async def start_read(dut, addr):
+async def start_read(dut, addr, timeout_cycles=80):
     global SELECTED_CHIP
 
     if addr is None:
@@ -238,13 +276,18 @@ async def start_read(dut, addr):
     else:
         SELECTED_CHIP = dut.qspi_flash_select
 
-    for _ in range(20):
+    for _ in range(timeout_cycles):
+        selected_chip = _resolved_int(SELECTED_CHIP)
+        flash_select = _resolved_int(dut.qspi_flash_select)
+        ram_a_select = _resolved_int(dut.qspi_ram_a_select)
+        ram_b_select = _resolved_int(dut.qspi_ram_b_select)
+        qspi_clk_out = _resolved_int(dut.qspi_clk_out)
         if (
-            _int_value(SELECTED_CHIP, "selected_chip") == 0
-            and _int_value(dut.qspi_flash_select, "qspi_flash_select") == (0 if dut.qspi_flash_select == SELECTED_CHIP else 1)
-            and _int_value(dut.qspi_ram_a_select, "qspi_ram_a_select") == (0 if dut.qspi_ram_a_select == SELECTED_CHIP else 1)
-            and _int_value(dut.qspi_ram_b_select, "qspi_ram_b_select") == (0 if dut.qspi_ram_b_select == SELECTED_CHIP else 1)
-            and _int_value(dut.qspi_clk_out, "qspi_clk_out") == 0
+            selected_chip == 0
+            and flash_select == (0 if dut.qspi_flash_select == SELECTED_CHIP else 1)
+            and ram_a_select == (0 if dut.qspi_ram_a_select == SELECTED_CHIP else 1)
+            and ram_b_select == (0 if dut.qspi_ram_b_select == SELECTED_CHIP else 1)
+            and qspi_clk_out == 0
         ):
             break
         await ClockCycles(dut.clk, 1, False)
@@ -296,18 +339,22 @@ async def start_read(dut, addr):
         assert _int_value(dut.qspi_clk_out, "qspi_clk_out") == 0
 
 
-async def start_write(dut, addr):
+async def start_write(dut, addr, timeout_cycles=80):
     if addr >= 0x1800000:
         selected_chip = dut.qspi_ram_b_select
     else:
         selected_chip = dut.qspi_ram_a_select
 
-    for _ in range(20):
+    for _ in range(timeout_cycles):
+        selected_chip_value = _resolved_int(selected_chip)
+        flash_select = _resolved_int(dut.qspi_flash_select)
+        qspi_clk_out = _resolved_int(dut.qspi_clk_out)
+        qspi_data_oe = _resolved_int(dut.qspi_data_oe)
         if (
-            _int_value(selected_chip, "selected_chip") == 0
-            and _int_value(dut.qspi_flash_select, "qspi_flash_select") == 1
-            and _int_value(dut.qspi_clk_out, "qspi_clk_out") == 0
-            and _int_value(dut.qspi_data_oe, "qspi_data_oe") == 0xF
+            selected_chip_value == 0
+            and flash_select == 1
+            and qspi_clk_out == 0
+            and qspi_data_oe == 0xF
         ):
             break
         await ClockCycles(dut.clk, 1, False)
@@ -338,13 +385,16 @@ async def send_instr(dut, data, ok_to_exit=False):
     for i in range(instr_len):
         dut.manual_qspi_data_in.value = (data >> NIBBLE_SHIFT_ORDER[i]) & 0xF
         await ClockCycles(dut.clk, 1, False)
-        for _ in range(40):
-            if ok_to_exit and _int_value(dut.qspi_flash_select, "qspi_flash_select") == 1:
+        for _ in range(200):
+            flash_select = _resolved_int(dut.qspi_flash_select)
+            qspi_clk_out = _resolved_int(dut.qspi_clk_out)
+            qspi_data_oe = _resolved_int(dut.qspi_data_oe)
+            if ok_to_exit and flash_select == 1:
                 return
             if (
-                _int_value(dut.qspi_flash_select, "qspi_flash_select") == 0
-                and _int_value(dut.qspi_clk_out, "qspi_clk_out") == 1
-                and _int_value(dut.qspi_data_oe, "qspi_data_oe") == 0
+                flash_select == 0
+                and qspi_clk_out == 1
+                and qspi_data_oe == 0
             ):
                 break
             await ClockCycles(dut.clk, 1, False)
@@ -367,8 +417,10 @@ async def expect_load(dut, addr, val, byte_count=4):
 
     saw_selected = False
     saw_flash_fetch = False
-    for _ in range(200):
-        if _int_value(selected_chip, "selected_chip") == 0:
+    for _ in range(400):
+        selected_chip_value = _resolved_int(selected_chip)
+        flash_select = _resolved_int(dut.qspi_flash_select)
+        if selected_chip_value == 0:
             saw_selected = True
             await start_read(dut, addr)
             dut.manual_qspi_data_in.value = (val >> NIBBLE_SHIFT_ORDER[0]) & 0xF
@@ -381,7 +433,7 @@ async def expect_load(dut, addr, val, byte_count=4):
                 assert _int_value(dut.qspi_clk_out, "qspi_clk_out") == 0
                 dut.manual_qspi_data_in.value = (val >> NIBBLE_SHIFT_ORDER[j]) & 0xF
             break
-        if _int_value(dut.qspi_flash_select, "qspi_flash_select") == 0:
+        if flash_select == 0:
             saw_flash_fetch = True
             await send_instr(dut, 0x0001, True)
         else:
@@ -415,8 +467,10 @@ async def expect_store(dut, addr, byte_count=4):
         raise AssertionError("Store target outside RAM window")
 
     value = 0
-    for _ in range(200):
-        if _int_value(selected_chip, "selected_chip") == 0:
+    for _ in range(400):
+        selected_chip_value = _resolved_int(selected_chip)
+        flash_select = _resolved_int(dut.qspi_flash_select)
+        if selected_chip_value == 0:
             await start_write(dut, addr)
             for j in range(byte_count * 2):
                 await ClockCycles(dut.clk, 1, False)
@@ -431,7 +485,7 @@ async def expect_store(dut, addr, byte_count=4):
                     assert _int_value(selected_chip, "selected_chip") == 0
                 assert _int_value(dut.qspi_clk_out, "qspi_clk_out") == 0
             break
-        if _int_value(dut.qspi_flash_select, "qspi_flash_select") == 0:
+        if flash_select == 0:
             await send_instr(dut, 0x0001, True)
         else:
             await ClockCycles(dut.clk, 1, False)
@@ -481,6 +535,41 @@ async def stop_nops():
 async def setup_bases(dut):
     await send_instr(dut, encode_lui(5, GPIO_BASE_IMM20))
     await send_instr(dut, encode_lui(6, UART_BASE_IMM20))
+
+
+async def set_reg_value(dut, rd, value):
+    upper, lower = split_lui_addi(value)
+    await send_instr(dut, encode_lui(rd, upper))
+    if lower != 0:
+        await send_instr(dut, InstructionADDI(rd, rd, lower).encode())
+
+
+async def load_addr_to_reg(dut, dest_reg, base_reg, offset, abs_addr, expected_value, byte_count=4, signed=False):
+    if byte_count == 1:
+        load_cls = InstructionLB if signed else InstructionLBU
+    elif byte_count == 2:
+        load_cls = InstructionLH if signed else InstructionLHU
+    elif byte_count == 4:
+        load_cls = InstructionLW
+    else:
+        raise ValueError(f"unsupported load width {byte_count}")
+
+    await send_instr(dut, load_cls(dest_reg, base_reg, offset).encode())
+    await expect_load(dut, abs_addr, expected_value, byte_count=byte_count)
+
+
+async def store_reg_to_addr(dut, base_reg, data_reg, offset, abs_addr, byte_count=4):
+    if byte_count == 1:
+        store_cls = InstructionSB
+    elif byte_count == 2:
+        store_cls = InstructionSH
+    elif byte_count == 4:
+        store_cls = InstructionSW
+    else:
+        raise ValueError(f"unsupported store width {byte_count}")
+
+    await send_instr(dut, store_cls(base_reg, data_reg, offset).encode())
+    return await expect_store(dut, abs_addr, byte_count=byte_count)
 
 
 def debug_signal_value(dut, sel):

@@ -61,12 +61,30 @@ async def test_gpio_uart_combo(dut):
 
 
 @cocotb.test()
+async def test_qspi_protocol(dut):
+    _expect_firmware("qspi_protocol.hex")
+    await start_clock(dut)
+    await reset_dut(dut, latency=1, use_qspi_model=True)
+    await wait_for_boot_activity(dut)
+    await wait_for_gpio_state(dut, 0x77, 0xFF, timeout_cycles=20000)
+
+
+@cocotb.test()
 async def test_uart_hello(dut):
     _expect_firmware("uart_hello.hex")
     await start_clock(dut)
     await reset_dut(dut, latency=1, use_qspi_model=True)
     await wait_for_boot_activity(dut)
     await _expect_uart_text(dut, "Hello, world!\r\n")
+
+
+@cocotb.test()
+async def test_uart_banner(dut):
+    _expect_firmware("uart_banner.hex")
+    await start_clock(dut)
+    await reset_dut(dut, latency=1, use_qspi_model=True)
+    await wait_for_boot_activity(dut)
+    await _expect_uart_text(dut, "OK\r\n")
 
 
 @cocotb.test()

@@ -36,6 +36,8 @@ jobs:
 
       - name: GL test
         uses: TinyTapeout/tt-gds-action/gl_test@ttsky26a
+        with:
+          test-dir: test
 
   viewer:
     needs: gds

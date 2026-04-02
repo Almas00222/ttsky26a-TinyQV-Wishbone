@@ -4,6 +4,7 @@ Generate TinyQV test firmware images as little-endian byte-per-line hex.
 """
 
 from pathlib import Path
+import random
 
 
 GPIO_BASE = 0x0300_0000
@@ -18,11 +19,18 @@ UART_FCR = 0x08
 UART_LCR = 0x0C
 UART_LSR = 0x14
 
+RAM_A_BASE = 0x0100_0000
+RAM_B_BASE = 0x0180_0000
+
 CSR_MIE = 0x304
 
 SYSTEM_CLOCK_HZ = 40_000_000
 UART_BAUD = 115_200
 UART_DIVISOR = (SYSTEM_CLOCK_HZ + (UART_BAUD * 8)) // (UART_BAUD * 16)
+
+
+def mask_u32(value):
+    return value & 0xFFFFFFFF
 
 
 def lui(rd, imm20):
@@ -252,6 +260,16 @@ def fw_uart_prime():
     return prog.resolve()
 
 
+def fw_uart_banner():
+    prog = Program()
+    setup_uart_115200(prog)
+    for idx, char in enumerate("OK\r\n"):
+        emit_uart_send_byte(prog, ord(char), f"banner_wait_{idx}")
+    prog.label("halt")
+    prog.emit("jal", 0, "halt")
+    return prog.resolve()
+
+
 def fw_uart_loopback():
     prog = Program()
     setup_uart_115200(prog)
@@ -365,12 +383,175 @@ def fw_uart_scratch_signature():
     return prog.resolve()
 
 
+def fw_qspi_protocol():
+    prog = Program()
+    setup_gpio(prog, data_value=0x00)
+    prog.inst(lui(5, RAM_A_BASE >> 12))
+    prog.inst(lui(6, RAM_B_BASE >> 12))
+
+    prog.inst(addi(7, 0, 0x34))
+    prog.inst(sw(7, 5, 0x20))
+    prog.inst(lw(8, 5, 0x20))
+    prog.inst(addi(2, 0, 0x34))
+    prog.emit("bne", 8, 2, "fail")
+
+    prog.inst(addi(9, 0, 0x56))
+    prog.inst(sw(9, 6, 0x24))
+    prog.inst(lw(10, 6, 0x24))
+    prog.inst(addi(2, 0, 0x56))
+    prog.emit("bne", 10, 2, "fail")
+
+    prog.inst(addi(2, 0, 0x77))
+    prog.inst(sw(2, 1, GPIO_DATAO))
+    prog.emit("jal", 0, "halt")
+
+    prog.label("fail")
+    prog.inst(addi(2, 0, 0xE7))
+    prog.inst(sw(2, 1, GPIO_DATAO))
+
+    prog.label("halt")
+    prog.emit("jal", 0, "halt")
+    return prog.resolve()
+
+
+def build_alu_stress_program(seed):
+    prog = Program()
+    setup_gpio(prog, data_value=0x00)
+
+    rng = random.Random(seed)
+    regs = (5, 6, 7, 8, 9)
+    state = {}
+
+    for reg in regs:
+        value = rng.randint(-512, 511)
+        state[reg] = mask_u32(value)
+        prog.inst(addi(reg, 0, value))
+
+    for _ in range(36):
+        rd = rng.choice(regs)
+        rs1 = rng.choice(regs)
+        op = rng.choice(("addi", "xori", "ori", "andi", "add", "sub", "slli", "srli"))
+
+        if op == "addi":
+            imm = rng.randint(-64, 63)
+            prog.inst(addi(rd, rs1, imm))
+            state[rd] = mask_u32(state[rs1] + imm)
+        elif op == "xori":
+            imm = rng.randint(0, 0xFF)
+            prog.inst(xori(rd, rs1, imm))
+            state[rd] = mask_u32(state[rs1] ^ imm)
+        elif op == "ori":
+            imm = rng.randint(0, 0xFF)
+            prog.inst(ori(rd, rs1, imm))
+            state[rd] = mask_u32(state[rs1] | imm)
+        elif op == "andi":
+            imm = rng.randint(0, 0xFF)
+            prog.inst(andi(rd, rs1, imm))
+            state[rd] = mask_u32(state[rs1] & imm)
+        elif op == "add":
+            rs2 = rng.choice(regs)
+            prog.inst(add(rd, rs1, rs2))
+            state[rd] = mask_u32(state[rs1] + state[rs2])
+        elif op == "sub":
+            rs2 = rng.choice(regs)
+            prog.inst(sub(rd, rs1, rs2))
+            state[rd] = mask_u32(state[rs1] - state[rs2])
+        elif op == "slli":
+            shamt = rng.randint(0, 7)
+            prog.inst(slli(rd, rs1, shamt))
+            state[rd] = mask_u32(state[rs1] << shamt)
+        elif op == "srli":
+            shamt = rng.randint(0, 7)
+            prog.inst(srli(rd, rs1, shamt))
+            state[rd] = mask_u32(state[rs1] >> shamt)
+
+    loop_count = 3
+    prog.inst(addi(12, 0, loop_count))
+    prog.label("mix_loop")
+    prog.inst(xori(5, 5, 0x2D))
+    state[5] = mask_u32(state[5] ^ 0x2D)
+    prog.inst(add(6, 6, 5))
+    state[6] = mask_u32(state[6] + state[5])
+    prog.inst(addi(12, 12, -1))
+    prog.emit("bne", 12, 0, "mix_loop")
+
+    signature = 0
+    for reg in regs:
+        signature ^= state[reg] & 0xFF
+    signature &= 0xFF
+
+    prog.inst(addi(2, 0, signature))
+    prog.inst(sw(2, 1, GPIO_DATAO))
+    prog.label("halt")
+    prog.emit("jal", 0, "halt")
+    return prog.resolve()
+
+
+def fw_alu_stress_seed1():
+    return build_alu_stress_program(0x2611)
+
+
+def fw_alu_stress_seed2():
+    return build_alu_stress_program(0x2612)
+
+
+def build_bus_stress_program(seed):
+    prog = Program()
+    setup_gpio(prog, data_value=0x00)
+    prog.inst(lui(5, RAM_A_BASE >> 12))
+    prog.inst(lui(6, RAM_B_BASE >> 12))
+    prog.inst(lui(10, UART_BASE >> 12))
+    prog.inst(addi(12, 0, 0))
+
+    rng = random.Random(seed)
+    state = 0
+
+    for idx in range(4):
+        value = rng.randint(1, 120)
+        mix = rng.randint(1, 0xFF)
+        ram_a_offset = 0x20 + idx * 4
+        ram_b_offset = 0x40 + idx * 4
+
+        prog.inst(addi(7, 0, value))
+        prog.inst(sw(7, 5, ram_a_offset))
+        prog.inst(lw(8, 5, ram_a_offset))
+        prog.inst(sw(8, 6, ram_b_offset))
+        prog.inst(lw(9, 6, ram_b_offset))
+        prog.inst(sw(9, 10, 0x1C))
+        prog.inst(lw(11, 10, 0x1C))
+        prog.inst(add(12, 12, 11))
+        prog.inst(xori(12, 12, mix))
+
+        state = mask_u32((state + value) ^ mix)
+
+    signature = state & 0xFF
+    prog.inst(andi(12, 12, 0x0FF))
+    prog.inst(sw(12, 1, GPIO_DATAO))
+    prog.label("halt")
+    prog.emit("jal", 0, "halt")
+    return prog.resolve()
+
+
+def fw_bus_stress_seed1():
+    return build_bus_stress_program(0x2621)
+
+
+def fw_bus_stress_seed2():
+    return build_bus_stress_program(0x2622)
+
+
 PROGRAMS = {
     "alu_signature.hex": fw_alu_signature,
+    "alu_stress_seed1.hex": fw_alu_stress_seed1,
+    "alu_stress_seed2.hex": fw_alu_stress_seed2,
+    "bus_stress_seed1.hex": fw_bus_stress_seed1,
+    "bus_stress_seed2.hex": fw_bus_stress_seed2,
     "gpio_write.hex": fw_gpio_write,
     "gpio_readback.hex": fw_gpio_readback,
     "gpio_uart_combo.hex": fw_gpio_uart_combo,
     "ram_signature.hex": fw_ram_signature,
+    "qspi_protocol.hex": fw_qspi_protocol,
+    "uart_banner.hex": fw_uart_banner,
     "uart_hello.hex": fw_uart_hello,
     "uart_prime.hex": fw_uart_prime,
     "uart_loopback.hex": fw_uart_loopback,

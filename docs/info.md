@@ -82,6 +82,7 @@ make test-rtl
 make test-comprehensive
 make synth-gate-netlist
 make test-gatelevel-smoke
+make test-gatelevel
 ```
 
 Current tests cover:
@@ -91,6 +92,7 @@ Current tests cover:
 - Manual QSPI instruction regressions for randomized ALU behavior, register load/store, peripheral interleave, timer interrupt entry, and external IRQ entry
 - Firmware-backed QSPI boot tests for GPIO, UART hello/prime output, loopback, timer, and IRQ handling
 - Gate-level regressions that reuse the same behavioral QSPI model against either a synthesized sky130 netlist or the final Tiny Tapeout/OpenLane netlist
+- A deep gate-level signoff suite with explicit flash/protocol checks at latency `1/2/3`, fixed-seed randomized ALU and memory stress, and full-program firmware sweeps on the stable lower latencies
 
 Useful verification targets:
 
@@ -104,6 +106,12 @@ make test-firmware-seeds
 make test-gatelevel-smoke
 make test-gatelevel-smoke-seeds
 ```
+
+Notes:
+
+- `make test-gatelevel-smoke` is the quick local confidence pass.
+- `make test-gatelevel` is the deeper signoff-oriented pass and is intentionally much slower.
+- The Tiny Tapeout `gds` `gl_test` job is intended to exercise the deep signoff-style gate-level flow, not only the smoke checks.
 
 CI signoff is wired through repo-level targets in `Makefile` and the workflow files under `.github/workflows/`.
 

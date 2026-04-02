@@ -14,12 +14,14 @@ test/
 ├── firmware/                # Checked-in firmware hex images used by CI/sim
 ├── gen_firmware.py          # Regenerates the checked-in firmware images
 ├── gate_level_tools.py      # Finds/stages sky130 gate netlists and PDK assets
+├── merge_junit.py           # Merges per-case cocotb JUnit outputs into one report
 ├── sim_qspi_soc.v           # Behavioral QSPI flash/RAM model
 ├── test_common.py           # Shared cocotb reset/QSPI/UART helpers
 ├── test_rtl.py              # Fast DUT-facing RTL smoke and pin-contract checks
 ├── test_comprehensive.py    # Manual-QSPI randomized/core/peripheral tests
 ├── test_firmware.py         # Firmware-backed QSPI boot/system tests
-├── test_gatelevel.py        # Gate-level top-level and firmware-backed checks
+├── test_gatelevel.py        # Deep gate-level signoff regression
+├── test_gatelevel_smoke.py  # Quick gate-level smoke regression
 ├── test_golden_models.py    # Unit tests for golden models
 ├── tb.v                     # Verilog testbench wrapper
 └── Makefile                 # Build and test targets
@@ -32,8 +34,8 @@ test/
 | `test-golden` | Pure Python/unit/vector checks for the reference models |
 | `test-rtl` | Fast DUT-facing smoke, reset, mux, and pin-contract checks |
 | `test-comprehensive` | Manual-QSPI core/peripheral/randomized integration tests plus firmware-backed regressions |
-| `test-gatelevel-smoke` | Quick gate-level reset, chip-select, and combo-boot checks |
-| `test-gatelevel` | Full gate-level firmware-backed regression |
+| `test-gatelevel-smoke` | Quick gate-level reset, ownership, mux, and combo-boot checks |
+| `test-gatelevel` | Deep gate-level signoff regression with protocol checks, fixed-seed stress, and mixed-latency firmware boots |
 
 ## What Is Tested
 
@@ -57,17 +59,30 @@ test/
 - `gpio_write`
 - `gpio_readback`
 - `gpio_uart_combo`
+- `uart_banner`
 - `uart_hello`
 - `uart_prime`
 - `uart_loopback`
 - `timer_demo`
 - `irq_demo`
 
-### Gate-Level Regression (`test_gatelevel.py`)
-- Reset ownership and QSPI tri-state checks using only top-level observables
-- QSPI chip-select exclusivity checks
+### Gate-Level Smoke (`test_gatelevel_smoke.py`)
+- Fast reset and UART-idle sanity
+- UIO ownership through reset release
 - GPIO/debug mux sanity while preserving UART on `uo[0]`
-- Firmware-backed gate-level checks for ALU, RAM, UART scratch, GPIO, UART hello/prime, loopback, timer, and IRQ demos
+- QSPI chip-select exclusivity
+- Combo firmware boot and GPIO stability checks
+
+### Deep Gate-Level Signoff (`test_gatelevel.py`)
+- Reset ownership and QSPI tri-state checks using only top-level observables
+- QSPI chip-select exclusivity checks during boot
+- Flash-fetch startup protocol sweeps across latency `1/2/3`
+- Firmware-backed QSPI protocol roundtrips that prove RAM A, RAM B, and return-to-flash activity
+- Fixed-seed ALU/control randomized stress with reproducible seed logging
+- Fixed-seed memory/GPIO randomized stress with reproducible seed logging
+- Firmware-backed gate-level checks for ALU, RAM, UART scratch, GPIO, UART banner/hello/prime, loopback, timer, and IRQ demos
+- Full-program latency sweeps for compact firmware (`uart_banner`, `ram_signature`) across latency `1/2`
+- Explicit latency `3` coverage via startup-fetch and protocol checks, which keeps the suite reproducible without turning firmware-completion checks into multi-minute stalls in sky130 gate-level simulation
 
 ### Golden Model Unit Tests (`test_golden_models.py`)
 - 39 unit tests validating golden model correctness
@@ -157,6 +172,8 @@ make test-gatelevel-smoke
 make test-gatelevel
 ```
 
+`make` inside `test/` now defaults to the deep gate-level signoff harness so the Tiny Tapeout `gds` `gl_test` action exercises the long-form suite by default. Expect this to run substantially longer than smoke or RTL checks.
+
 ### Run All Tests
 ```sh
 make test-all
@@ -174,7 +191,7 @@ make clean-all
 
 ## Test Results
 
-- `results.xml`: JUnit-format test results (for CI)
+- `results.xml`: Merged JUnit-format test results (for CI)
 - `sim_build/`: Simulation build artifacts
 - `sim_build/tb.fst`: FST waveform for debugging
 
