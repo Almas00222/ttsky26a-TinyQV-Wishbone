@@ -23,6 +23,26 @@ def iter_suites(root):
         raise ValueError(f"Unsupported JUnit root tag {root.tag!r}")
 
 
+def testcase_counts(suite):
+    testcases = list(suite.iter("testcase"))
+    return {
+        "tests": len(testcases),
+        "failures": sum(len(testcase.findall("failure")) for testcase in testcases),
+        "errors": sum(len(testcase.findall("error")) for testcase in testcases),
+        "skipped": sum(len(testcase.findall("skipped")) for testcase in testcases),
+        "time": sum(parse_attr(testcase, "time", float) for testcase in testcases),
+    }
+
+
+def normalize_suite_attrs(suite):
+    counts = testcase_counts(suite)
+    for name in COUNT_ATTRS:
+        suite.set(name, str(counts[name]))
+    for name in TIME_ATTRS:
+        suite.set(name, f"{counts[name]:.6f}")
+    return counts
+
+
 def main(argv):
     if len(argv) < 2:
         raise SystemExit("usage: merge_junit.py <results1.xml> <results2.xml> ...")
@@ -34,11 +54,12 @@ def main(argv):
     for path in argv[1:]:
         root = ET.parse(path).getroot()
         for suite in iter_suites(root):
+            suite_counts = normalize_suite_attrs(suite)
             merged.append(suite)
             for name in COUNT_ATTRS:
-                counts[name] += parse_attr(suite, name, int)
+                counts[name] += suite_counts[name]
             for name in TIME_ATTRS:
-                times[name] += parse_attr(suite, name, float)
+                times[name] += suite_counts[name]
 
     for name, value in counts.items():
         merged.set(name, str(value))
