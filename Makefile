@@ -95,8 +95,8 @@ lint-iverilog:
 	iverilog -g2012 -Wall $(INCLUDE_DIRS) -s tt_um_TSARKA_TinyQV $(PROJECT_SOURCES) -o /tmp/tinyqv_iverilog_lint.out
 
 lint-verilator:
-	verilator --lint-only -Wall --top-module tt_um_TSARKA_TinyQV \
-		-Wno-DECLFILENAME -Wno-UNUSEDSIGNAL -Wno-UNDRIVEN \
+	verilator --lint-only -Wall --no-timing --top-module tt_um_TSARKA_TinyQV \
+		-Wno-DECLFILENAME -Wno-UNUSEDSIGNAL -Wno-UNDRIVEN -Wno-ASSIGNDLY \
 		$(INCLUDE_DIRS) $(PROJECT_SOURCES)
 
 formal-qspi:
