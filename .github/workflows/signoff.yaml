@@ -35,18 +35,29 @@ jobs:
           cd /tmp/sby
           sudo make install PREFIX=/usr/local
 
+      - name: Install sky130 PDK
+        uses: TinyTapeout/ciel-action@v1
+        with:
+          pdk_name: sky130A
+          pdk_root: /home/runner/pdk
+
+      - name: Set PDK environment
+        shell: bash
+        run: |
+          echo "PDK_ROOT=/home/runner/pdk" >> "$GITHUB_ENV"
+          echo "SKY130A=/home/runner/pdk/sky130A" >> "$GITHUB_ENV"
+
       - name: Run signoff verification
         shell: bash
         run: |
           make test-golden
           make test-rtl
           make test-comprehensive
-          make synth-gate-netlist
-          make test-gatelevel-smoke
           make lint-iverilog
           make lint-verilator
-          make formal-qspi
-          make formal-wb-bridge
+          make synth-gate-netlist
+          make test-gatelevel-smoke
+          make formal-all
 
       - name: Upload signoff artifacts
         if: success() || failure()
