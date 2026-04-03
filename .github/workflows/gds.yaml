@@ -34,10 +34,76 @@ jobs:
         with:
           submodules: recursive
 
-      - name: GL test
-        uses: TinyTapeout/tt-gds-action/gl_test@ttsky26a
+      - name: Download GDS artifact
+        uses: actions/download-artifact@v7
         with:
-          test-dir: test
+          name: tt_submission
+
+      - name: Set up environment variables
+        working-directory: tt_submission
+        shell: bash
+        run: |
+          PDK=$(jq -r '.PDK' pdk.json)
+          PDK_ROOT=/home/runner/pdk
+          PDK_SOURCE=$(jq -r '.PDK_SOURCE' pdk.json)
+          PDK_VERSION=$(jq -r '.PDK_VERSION' pdk.json)
+
+          cat << __EOF >> $GITHUB_ENV
+          PDK=$PDK
+          PDK_ROOT=$PDK_ROOT
+          PDK_SOURCE=$PDK_SOURCE
+          PDK_VERSION=$PDK_VERSION
+          __EOF
+
+      - name: Install ${{ env.PDK }} PDK
+        uses: TinyTapeout/ciel-action@v1
+        with:
+          pdk_name: ${{ env.PDK }}
+          pdk_version: ${{ env.PDK_VERSION }}
+          pdk_root: ${{ env.PDK_ROOT }}
+
+      - name: Setup python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install Python packages
+        shell: bash
+        run: pip install -r test/requirements.txt
+
+      - name: Install iverilog
+        shell: bash
+        run: |
+          wget https://github.com/TinyTapeout/iverilog/releases/download/v13.0/iverilog_13.0-1_amd64.deb
+          sudo apt-get update -y
+          sudo apt-get install -y ./iverilog_13.0-1_amd64.deb
+
+      - name: Run GL tests
+        shell: bash
+        run: |
+          cp tt_submission/*.v test/gate_level_netlist.v
+          cd test
+          rm -f tb.vcd tb.fst results.xml
+          make clean
+          GATES=yes make
+          make check-results
+
+      - name: Upload Waveform and Test Results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gatelevel_test_results
+          path: |
+            test/tb.vcd
+            test/tb.fst
+            test/results.xml
+            test/output/*
+
+      - name: Test Summary
+        if: always()
+        uses: test-summary/action@v2.4
+        with:
+          paths: test/results.xml
 
   viewer:
     needs: gds
