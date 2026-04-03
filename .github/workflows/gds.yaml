@@ -81,6 +81,8 @@ jobs:
       - name: Run GL tests
         shell: bash
         run: |
+          # Run locally instead of TinyTapeout's gl_test wrapper because that
+          # action greps for the string "failure" and misclassifies failures="0".
           cp tt_submission/*.v test/gate_level_netlist.v
           cd test
           rm -f tb.vcd tb.fst results.xml
