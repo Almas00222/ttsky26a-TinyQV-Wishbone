@@ -1,0 +1,6 @@
+<testsuites name="results">
+  <testsuite name="all" package="all">
+    <property name="random_seed" value="1775209005" />
+    <testcase name="test_gl_uio_oe_reset_ownership" classname="test_gatelevel_smoke" file="/home/almas/open-source/ttsky26a-TinyQV-Wishbone/test/test_gatelevel_smoke.py" lineno="23" time="0.87436842918396" sim_time_ns="225.001" ratio_time="257.32973937541567" />
+  </testsuite>
+</testsuites>

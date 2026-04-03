@@ -19,7 +19,7 @@ from golden_models.wishbone_model import (
     WishboneTransaction, WishboneMonitor, WishboneScoreboard
 )
 from golden_models.uart_model import (
-    UART16550Model, UARTRegister, UARTConfig, UARTBitBangModel
+    UART16550Model, UARTRegister, UARTConfig, UARTBitBangModel, UARTInterrupt
 )
 from golden_models.gpio_model import (
     GPIO8Model, GPIORegister, GPIOScoreboard, GPIOCoverageCollector
@@ -175,6 +175,155 @@ class TestUART16550Model(unittest.TestCase):
         
         data = self.uart.read_register(UARTRegister.RBR)
         self.assertEqual(data, 0x41)
+
+
+class TestUART16550FIFOOverflow(unittest.TestCase):
+    """Tests for UART FIFO overflow and error conditions."""
+
+    def setUp(self):
+        self.uart = UART16550Model(clock_freq_hz=40_000_000)
+        self.uart.reset()
+        self.uart.write_register(UARTRegister.FCR, 0x01)  # Enable FIFO
+        self.uart.write_register(UARTRegister.LCR, 0x03)  # 8N1
+
+    def test_fifo_fill_no_overflow(self):
+        """Fill RX FIFO to capacity (16 bytes) without overflow."""
+        for i in range(16):
+            self.uart.send_byte(i & 0xFF)
+        lsr = self.uart.read_register(UARTRegister.LSR)
+        self.assertTrue(lsr & 0x01, "DR should be set")
+        self.assertFalse(lsr & 0x02, "OE should NOT be set at exactly 16 bytes")
+
+    def test_fifo_overflow_17th_byte(self):
+        """17th byte into a full RX FIFO must set the Overrun Error bit."""
+        for i in range(17):
+            self.uart.send_byte(i & 0xFF)
+        lsr = self.uart.read_register(UARTRegister.LSR)
+        self.assertTrue(lsr & 0x02, "OE (overrun error) must be set after 17 bytes")
+        self.assertTrue(lsr & 0x01, "DR should still be set")
+
+    def test_fifo_overflow_clears_on_lsr_read(self):
+        """Reading LSR must clear the OE bit."""
+        for i in range(18):
+            self.uart.send_byte(i & 0xFF)
+        lsr1 = self.uart.read_register(UARTRegister.LSR)
+        self.assertTrue(lsr1 & 0x02, "OE should be set")
+        lsr2 = self.uart.read_register(UARTRegister.LSR)
+        self.assertFalse(lsr2 & 0x02, "OE should be cleared after read")
+
+    def test_fifo_drain_after_overflow(self):
+        """First 16 bytes are still readable after overflow."""
+        for i in range(20):
+            self.uart.send_byte(i & 0xFF)
+        for i in range(16):
+            data = self.uart.read_register(UARTRegister.RBR)
+            self.assertEqual(data, i, f"Byte {i} mismatch")
+        # FIFO should now be empty
+        lsr = self.uart.read_register(UARTRegister.LSR)
+        self.assertFalse(lsr & 0x01, "DR should be clear after draining FIFO")
+
+    def test_non_fifo_overrun(self):
+        """Without FIFO, second RX byte before read sets OE."""
+        self.uart.reset()
+        self.uart.write_register(UARTRegister.LCR, 0x03)  # 8N1, FIFO disabled
+        self.uart.send_byte(0x41)
+        self.uart.send_byte(0x42)
+        lsr = self.uart.read_register(UARTRegister.LSR)
+        self.assertTrue(lsr & 0x02, "OE must be set in non-FIFO overrun")
+
+
+class TestUART16550Parity(unittest.TestCase):
+    """Tests for UART parity error detection."""
+
+    def setUp(self):
+        self.uart = UART16550Model(clock_freq_hz=40_000_000)
+        self.uart.reset()
+        self.uart.write_register(UARTRegister.FCR, 0x01)  # Enable FIFO
+
+    def _configure_odd_parity(self):
+        """Configure 8-bit data, 1 stop bit, odd parity."""
+        # LCR: bits [1:0]=11 (8-bit), bit 3=1 (parity enable), bit 4=0 (odd)
+        self.uart.write_register(UARTRegister.LCR, 0x0B)  # 8O1
+        config = self.uart.get_config()
+        self.assertTrue(config.parity_enable)
+        self.assertFalse(config.even_parity)
+
+    def _configure_even_parity(self):
+        """Configure 8-bit data, 1 stop bit, even parity."""
+        # LCR: bits [1:0]=11 (8-bit), bit 3=1, bit 4=1 (even)
+        self.uart.write_register(UARTRegister.LCR, 0x1B)  # 8E1
+        config = self.uart.get_config()
+        self.assertTrue(config.parity_enable)
+        self.assertTrue(config.even_parity)
+
+    def test_parity_correct_odd(self):
+        """Byte with correct odd parity should NOT set PE."""
+        self._configure_odd_parity()
+        self.uart.send_byte(0x55)  # 4 ones → odd parity bit = 1
+        lsr = self.uart.read_register(UARTRegister.LSR)
+        self.assertFalse(lsr & 0x04, "PE should not be set for correct parity")
+
+    def test_parity_correct_even(self):
+        """Byte with correct even parity should NOT set PE."""
+        self._configure_even_parity()
+        self.uart.send_byte(0x55)
+        lsr = self.uart.read_register(UARTRegister.LSR)
+        self.assertFalse(lsr & 0x04, "PE should not be set for correct parity")
+
+    def test_lcr_odd_parity_config(self):
+        """Verify LCR decodes odd parity correctly."""
+        self._configure_odd_parity()
+        config = self.uart.get_config()
+        self.assertEqual(config.data_bits, 8)
+        self.assertEqual(config.stop_bits, 1)
+        self.assertTrue(config.parity_enable)
+        self.assertFalse(config.even_parity)
+
+    def test_lcr_even_parity_config(self):
+        """Verify LCR decodes even parity correctly."""
+        self._configure_even_parity()
+        config = self.uart.get_config()
+        self.assertEqual(config.data_bits, 8)
+        self.assertTrue(config.parity_enable)
+        self.assertTrue(config.even_parity)
+
+
+class TestUART16550Interrupt(unittest.TestCase):
+    """Tests for UART interrupt generation."""
+
+    def setUp(self):
+        self.uart = UART16550Model(clock_freq_hz=40_000_000)
+        self.uart.reset()
+        self.uart.write_register(UARTRegister.FCR, 0x01)  # Enable FIFO
+        self.uart.write_register(UARTRegister.LCR, 0x03)  # 8N1
+
+    def test_rx_data_available_interrupt(self):
+        """IER bit 0 enables RDA interrupt when FIFO reaches trigger level."""
+        self.uart.write_register(UARTRegister.IER, 0x01)  # Enable RDA
+        self.uart.send_byte(0x41)
+        iir = self.uart.read_register(UARTRegister.IIR)
+        self.assertEqual(iir & 0x0F, UARTInterrupt.RECEIVER_DATA_AVAILABLE)
+
+    def test_thre_interrupt(self):
+        """IER bit 1 enables THRE interrupt when TX holding is empty."""
+        self.uart.write_register(UARTRegister.IER, 0x02)  # Enable THRE
+        iir = self.uart.read_register(UARTRegister.IIR)
+        self.assertEqual(iir & 0x0F, UARTInterrupt.TRANSMITTER_HOLDING_EMPTY)
+
+    def test_line_status_interrupt_on_overrun(self):
+        """IER bit 2 enables LSR interrupt on overrun error."""
+        self.uart.write_register(UARTRegister.IER, 0x04)  # Enable RLS
+        for i in range(17):
+            self.uart.send_byte(i)
+        iir = self.uart.read_register(UARTRegister.IIR)
+        self.assertEqual(iir & 0x0F, UARTInterrupt.RECEIVER_LINE_STATUS)
+
+    def test_no_interrupt_when_disabled(self):
+        """With IER=0, no interrupts are reported."""
+        self.uart.write_register(UARTRegister.IER, 0x00)
+        self.uart.send_byte(0x41)
+        iir = self.uart.read_register(UARTRegister.IIR)
+        self.assertEqual(iir & 0x0F, UARTInterrupt.NO_INTERRUPT)
 
 
 class TestUARTBitBang(unittest.TestCase):

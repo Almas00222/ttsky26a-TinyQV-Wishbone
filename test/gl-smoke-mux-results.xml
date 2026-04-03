@@ -1,0 +1,6 @@
+<testsuites name="results">
+  <testsuite name="all" package="all">
+    <property name="random_seed" value="1775209012" />
+    <testcase name="test_gl_top_level_mux_and_uart_mirror" classname="test_gatelevel_smoke" file="/home/almas/open-source/ttsky26a-TinyQV-Wishbone/test/test_gatelevel_smoke.py" lineno="42" time="0.9846305847167969" sim_time_ns="600.001" ratio_time="609.366608465219" />
+  </testsuite>
+</testsuites>

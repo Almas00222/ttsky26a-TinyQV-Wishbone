@@ -146,3 +146,33 @@ async def test_random_reset_recovery_is_strict(dut):
     for latency in [1, 2, 3, 1, 3]:
         await reset_dut(dut, latency=latency, use_qspi_model=False)
         assert await wait_for_fetch_start(dut, timeout_cycles=200), f"fetch did not restart for latency={latency}"
+
+
+@cocotb.test()
+async def test_reset_during_active_bus(dut):
+    """Assert reset while the CPU is actively fetching from flash, then
+    verify the design recovers cleanly: tri-state bus, CS lines deasserted,
+    and a fresh flash fetch starts after reset release."""
+    await start_clock(dut)
+    await reset_dut(dut, latency=1, use_qspi_model=False)
+
+    # Wait until the CPU is actively fetching (flash CS low = bus active)
+    assert await wait_for_fetch_start(dut, timeout_cycles=200), "CPU never started fetching"
+
+    # Let the bus run for a few cycles so we're mid-transaction
+    await ClockCycles(dut.clk, 4)
+
+    # Slam reset while the bus is active
+    dut.rst_n.value = 0
+    await ClockCycles(dut.clk, 10)
+
+    # During reset: verify safe state
+    assert _int_value(dut.uio_oe, "uio_oe") == 0, "QSPI bus must be tri-stated during reset"
+    assert _int_value(dut.qspi_flash_select, "qspi_flash_select") == 1, "Flash CS must be deasserted during reset"
+    assert _int_value(dut.qspi_ram_a_select, "qspi_ram_a_select") == 1, "RAM A CS must be deasserted during reset"
+    assert _int_value(dut.qspi_ram_b_select, "qspi_ram_b_select") == 1, "RAM B CS must be deasserted during reset"
+
+    # Release reset and confirm clean recovery
+    dut.rst_n.value = 1
+    await ClockCycles(dut.clk, 1)
+    assert await wait_for_fetch_start(dut, timeout_cycles=200), "CPU did not resume fetching after mid-bus reset"

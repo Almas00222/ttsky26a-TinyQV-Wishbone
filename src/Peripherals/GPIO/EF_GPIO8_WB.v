@@ -367,4 +367,66 @@ module EF_GPIO8_WB (
     if (rst_i) ack_o <= 1'b0;
     else if (wb_valid & ~ack_o) ack_o <= 1'b1;
     else ack_o <= 1'b0;
+
+`ifdef FORMAL
+  reg f_past_valid = 1'b0;
+  initial assume(rst_i);
+
+  always @(posedge clk_i) begin
+    f_past_valid <= 1'b1;
+
+    if (!f_past_valid)
+      assume(rst_i);
+
+    // --- Wishbone B4 pipelined slave protocol checks ---
+
+    // 1. ACK must only assert when there was a valid request
+    if (ack_o)
+      assert(f_past_valid && $past(wb_valid) && !$past(ack_o));
+
+    // 2. ACK is never held for two consecutive cycles
+    if (f_past_valid && $past(ack_o))
+      assert(!ack_o);
+
+    // 3. After reset, ACK must be low
+    if (f_past_valid && $past(rst_i))
+      assert(!ack_o);
+
+    // 4. DATAO register holds its value when not written
+    if (!rst_i) begin
+      if (f_past_valid && !$past(rst_i)
+          && !($past(wb_we) && ($past(adr_i[16-1:0]) == DATAO_REG_OFFSET)))
+        assert(DATAO_REG == $past(DATAO_REG));
+
+      // 5. DIR register holds its value when not written
+      if (f_past_valid && !$past(rst_i)
+          && !($past(wb_we) && ($past(adr_i[16-1:0]) == DIR_REG_OFFSET)))
+        assert(DIR_REG == $past(DIR_REG));
+
+      // 6. DATAO write-through: value written appears next cycle
+      if (f_past_valid && !$past(rst_i)
+          && $past(wb_we) && ($past(adr_i[16-1:0]) == DATAO_REG_OFFSET))
+        assert(DATAO_REG == $past(dat_i[7:0]));
+
+      // 7. DIR write-through: value written appears next cycle
+      if (f_past_valid && !$past(rst_i)
+          && $past(wb_we) && ($past(adr_i[16-1:0]) == DIR_REG_OFFSET))
+        assert(DIR_REG == $past(dat_i[7:0]));
+
+      // 8. io_oe must always mirror DIR_REG
+      assert(io_oe == DIR_REG);
+
+      // 9. io_out must always mirror DATAO_REG
+      assert(io_out == DATAO_REG);
+    end
+
+    // 10. After reset, registers are zero
+    if (f_past_valid && $past(rst_i)) begin
+      assert(DATAO_REG == 8'd0);
+      assert(DIR_REG   == 8'd0);
+      assert(IM_REG    == 32'd0);
+    end
+  end
+`endif
+
 endmodule

@@ -45,7 +45,8 @@ INCLUDE_DIRS := \
 	test-rtl test-golden test-comprehensive test-firmware test-gatelevel test-all test-gatelevel-smoke \
 	test-rtl-seeds test-comprehensive-seeds test-firmware-seeds test-gatelevel-smoke-seeds \
 	lint-iverilog lint-verilator formal-qspi formal-qspi-boolector \
-	formal-wb-bridge formal-wb-bridge-boolector clean
+	formal-wb-bridge formal-wb-bridge-boolector \
+	formal-gpio-wb formal-uart-wb-adapter formal-all clean
 
 RANDOM_SEEDS ?= 1 2 3 4 5 6 7 8 9 10
 
@@ -109,6 +110,14 @@ formal-wb-bridge:
 
 formal-wb-bridge-boolector:
 	$(MAKE) formal-wb-bridge
+
+formal-gpio-wb:
+	sby -f $(FORMAL_DIR)/gpio_wb_abc.sby
+
+formal-uart-wb-adapter:
+	sby -f $(FORMAL_DIR)/uart_wb_adapter_abc.sby
+
+formal-all: formal-wb-bridge formal-gpio-wb formal-uart-wb-adapter formal-qspi
 
 clean:
 	$(MAKE) -C $(TEST_DIR) clean-all

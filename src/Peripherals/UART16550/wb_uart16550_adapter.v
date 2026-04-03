@@ -72,6 +72,51 @@ module wb_uart16550_adapter (
 
     assign wb_dat_o = {24'd0, uart_rdata_byte};
 
+`ifdef FORMAL
+    reg f_past_valid = 1'b0;
+    initial assume(rst);
+
+    always @(posedge clk) begin
+        f_past_valid <= 1'b1;
+
+        if (!f_past_valid)
+            assume(rst);
+
+        // --- Wishbone protocol pass-through checks ---
+
+        // 1. Lane mapping: exactly one sel bit is always set
+        assert(uart_sel_mapped == 4'b1000 ||
+               uart_sel_mapped == 4'b0100 ||
+               uart_sel_mapped == 4'b0010 ||
+               uart_sel_mapped == 4'b0001);
+
+        // 2. Write data replication: all 4 bytes must be identical
+        assert(uart_wdata_mapped[7:0]   == wb_dat_i[7:0]);
+        assert(uart_wdata_mapped[15:8]  == wb_dat_i[7:0]);
+        assert(uart_wdata_mapped[23:16] == wb_dat_i[7:0]);
+        assert(uart_wdata_mapped[31:24] == wb_dat_i[7:0]);
+
+        // 3. Read data output must fit in low 8 bits
+        assert(wb_dat_o[31:8] == 24'd0);
+
+        // 4. CYC/STB pass-through: adapter relays, not generates
+        //    (wb_stb_i and wb_cyc_i go straight to uart_top)
+
+        // 5. Register index decode consistency
+        assert(uart_reg_idx == wb_adr_i[4:2]);
+
+        // 6. Lane decode matches register index LSBs
+        if (uart_reg_idx[1:0] == 2'b00) assert(uart_sel_mapped == 4'b1000);
+        if (uart_reg_idx[1:0] == 2'b01) assert(uart_sel_mapped == 4'b0100);
+        if (uart_reg_idx[1:0] == 2'b10) assert(uart_sel_mapped == 4'b0010);
+        if (uart_reg_idx[1:0] == 2'b11) assert(uart_sel_mapped == 4'b0001);
+
+        // 7. Upper address bits are zero in forwarded address
+        assert(uart_adr_5[4:3] == 2'b00);
+        assert(uart_adr_5[1:0] == 2'b00);
+    end
+`endif
+
     wire _unused = &{wb_sel_i, 1'b0};
 
 endmodule

@@ -1,0 +1,36 @@
+[options]
+mode prove
+
+[engines]
+abc pdr
+
+[script]
+read -formal -DFORMAL -Isrc/Peripherals/UART16550 timescale.v
+read -formal -DFORMAL -Isrc/Peripherals/UART16550 uart_defines.v
+read -formal -DFORMAL -Isrc/Peripherals/UART16550 raminfr.v
+read -formal -DFORMAL -Isrc/Peripherals/UART16550 uart_sync_flops.v
+read -formal -DFORMAL -Isrc/Peripherals/UART16550 uart_transmitter.v
+read -formal -DFORMAL -Isrc/Peripherals/UART16550 uart_receiver.v
+read -formal -DFORMAL -Isrc/Peripherals/UART16550 uart_tfifo.v
+read -formal -DFORMAL -Isrc/Peripherals/UART16550 uart_rfifo.v
+read -formal -DFORMAL -Isrc/Peripherals/UART16550 uart_debug_if.v
+read -formal -DFORMAL -Isrc/Peripherals/UART16550 uart_regs.v
+read -formal -DFORMAL -Isrc/Peripherals/UART16550 uart_wb.v
+read -formal -DFORMAL -Isrc/Peripherals/UART16550 uart_top.v
+read -formal -DFORMAL -Isrc/Peripherals/UART16550 wb_uart16550_adapter.v
+prep -top wb_uart16550_adapter
+
+[files]
+src/Peripherals/UART16550/timescale.v
+src/Peripherals/UART16550/uart_defines.v
+src/Peripherals/UART16550/raminfr.v
+src/Peripherals/UART16550/uart_sync_flops.v
+src/Peripherals/UART16550/uart_transmitter.v
+src/Peripherals/UART16550/uart_receiver.v
+src/Peripherals/UART16550/uart_tfifo.v
+src/Peripherals/UART16550/uart_rfifo.v
+src/Peripherals/UART16550/uart_debug_if.v
+src/Peripherals/UART16550/uart_regs.v
+src/Peripherals/UART16550/uart_wb.v
+src/Peripherals/UART16550/uart_top.v
+src/Peripherals/UART16550/wb_uart16550_adapter.v

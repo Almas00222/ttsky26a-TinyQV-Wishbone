@@ -1,0 +1,16 @@
+[options]
+mode prove
+
+[engines]
+abc pdr
+
+[script]
+read -formal -DFORMAL ef_util_stubs.v
+read -formal -DFORMAL EF_GPIO8.v
+read -formal -DFORMAL EF_GPIO8_WB.v
+prep -top EF_GPIO8_WB
+
+[files]
+src/Peripherals/GPIO/ef_util_stubs.v
+src/Peripherals/GPIO/EF_GPIO8.v
+src/Peripherals/GPIO/EF_GPIO8_WB.v

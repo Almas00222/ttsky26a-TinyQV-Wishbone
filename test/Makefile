@@ -188,19 +188,43 @@ test-golden:
 	python3 -m pytest test_golden_models.py -v
 
 test-comprehensive: require-cocotb
+	@echo "=== Comprehensive suite: model tests (8) ==="
 	rm -rf sim_build results.xml
-	FIRMWARE_HEX=$(TEST_DIR)/firmware/alu_signature.hex MODULE=test_comprehensive TESTCASE=test_alu_signature $(MAKE) -f $(firstword $(MAKEFILE_LIST)) sim
+	MODULE=test_comprehensive TESTCASE=test_wb_bridge_byte_select_8bit,test_wb_bridge_byte_select_16bit,test_wb_bridge_byte_select_32bit,test_wb_bridge_data_steering,test_wb_bridge_timeout,test_uart_divisor_setting,test_reset_state,test_time_pulse_cadence $(MAKE) -f $(firstword $(MAKEFILE_LIST)) sim
 	$(MAKE) -f $(firstword $(MAKEFILE_LIST)) check-results
+	@echo "=== Comprehensive suite: gpio_write.hex (3) ==="
 	rm -rf sim_build results.xml
-	FIRMWARE_HEX=$(TEST_DIR)/firmware/ram_signature.hex MODULE=test_comprehensive TESTCASE=test_ram_signature $(MAKE) -f $(firstword $(MAKEFILE_LIST)) sim
+	FIRMWARE_HEX=$(TEST_DIR)/firmware/gpio_write.hex MODULE=test_comprehensive TESTCASE=test_gpio_output_with_golden_model,test_gpio_direction_random,test_rapid_gpio_writes $(MAKE) -f $(firstword $(MAKEFILE_LIST)) sim
 	$(MAKE) -f $(firstword $(MAKEFILE_LIST)) check-results
+	@echo "=== Comprehensive suite: gpio_uart_combo.hex (3) ==="
 	rm -rf sim_build results.xml
-	FIRMWARE_HEX=$(TEST_DIR)/firmware/uart_scratch_signature.hex MODULE=test_comprehensive TESTCASE=test_uart_scratch_signature $(MAKE) -f $(firstword $(MAKEFILE_LIST)) sim
+	FIRMWARE_HEX=$(TEST_DIR)/firmware/gpio_uart_combo.hex MODULE=test_comprehensive TESTCASE=test_gpio_random_values,test_gpio_full_output_range,test_random_register_sequence $(MAKE) -f $(firstword $(MAKEFILE_LIST)) sim
 	$(MAKE) -f $(firstword $(MAKEFILE_LIST)) check-results
+	@echo "=== Comprehensive suite: uart_hello.hex (1) ==="
 	rm -rf sim_build results.xml
-	FIRMWARE_HEX=$(TEST_DIR)/firmware/gpio_uart_combo.hex MODULE=test_comprehensive TESTCASE=test_combo_uart_byte_still_matches $(MAKE) -f $(firstword $(MAKEFILE_LIST)) sim
+	FIRMWARE_HEX=$(TEST_DIR)/firmware/uart_hello.hex MODULE=test_comprehensive TESTCASE=test_uart_tx_random_bytes $(MAKE) -f $(firstword $(MAKEFILE_LIST)) sim
 	$(MAKE) -f $(firstword $(MAKEFILE_LIST)) check-results
-	$(MAKE) -f $(firstword $(MAKEFILE_LIST)) test-firmware
+	@echo "=== Comprehensive suite: uart_loopback.hex (1) ==="
+	rm -rf sim_build results.xml
+	FIRMWARE_HEX=$(TEST_DIR)/firmware/uart_loopback.hex MODULE=test_comprehensive TESTCASE=test_uart_rx_random_bytes $(MAKE) -f $(firstword $(MAKEFILE_LIST)) sim
+	$(MAKE) -f $(firstword $(MAKEFILE_LIST)) check-results
+	@echo "=== Comprehensive suite: uart_scratch_signature.hex (1) ==="
+	rm -rf sim_build results.xml
+	FIRMWARE_HEX=$(TEST_DIR)/firmware/uart_scratch_signature.hex MODULE=test_comprehensive TESTCASE=test_uart_scratch_register $(MAKE) -f $(firstword $(MAKEFILE_LIST)) sim
+	$(MAKE) -f $(firstword $(MAKEFILE_LIST)) check-results
+	@echo "=== Comprehensive suite: ram_signature.hex (1) ==="
+	rm -rf sim_build results.xml
+	FIRMWARE_HEX=$(TEST_DIR)/firmware/ram_signature.hex MODULE=test_comprehensive TESTCASE=test_cpu_register_load_store $(MAKE) -f $(firstword $(MAKEFILE_LIST)) sim
+	$(MAKE) -f $(firstword $(MAKEFILE_LIST)) check-results
+	@echo "=== Comprehensive suite: alu_signature.hex (1) ==="
+	rm -rf sim_build results.xml
+	FIRMWARE_HEX=$(TEST_DIR)/firmware/alu_signature.hex MODULE=test_comprehensive TESTCASE=test_cpu_alu_addi $(MAKE) -f $(firstword $(MAKEFILE_LIST)) sim
+	$(MAKE) -f $(firstword $(MAKEFILE_LIST)) check-results
+	@echo "=== Comprehensive suite: bus_stress_seed1.hex (1) ==="
+	rm -rf sim_build results.xml
+	FIRMWARE_HEX=$(TEST_DIR)/firmware/bus_stress_seed1.hex MODULE=test_comprehensive TESTCASE=test_memory_peripheral_interleave $(MAKE) -f $(firstword $(MAKEFILE_LIST)) sim
+	$(MAKE) -f $(firstword $(MAKEFILE_LIST)) check-results
+	@echo "=== Comprehensive suite: COMPLETE (20/20) ==="
 
 test-firmware: require-cocotb
 	rm -rf sim_build results.xml
@@ -223,6 +247,9 @@ test-firmware: require-cocotb
 	$(MAKE) -f $(firstword $(MAKEFILE_LIST)) check-results
 	rm -rf sim_build results.xml
 	FIRMWARE_HEX=$(TEST_DIR)/firmware/uart_loopback.hex MODULE=test_firmware TESTCASE=test_uart_loopback $(MAKE) -f $(firstword $(MAKEFILE_LIST)) sim
+	$(MAKE) -f $(firstword $(MAKEFILE_LIST)) check-results
+	rm -rf sim_build results.xml
+	FIRMWARE_HEX=$(TEST_DIR)/firmware/uart_loopback.hex MODULE=test_firmware TESTCASE=test_uart_loopback_stress $(MAKE) -f $(firstword $(MAKEFILE_LIST)) sim
 	$(MAKE) -f $(firstword $(MAKEFILE_LIST)) check-results
 	rm -rf sim_build results.xml
 	FIRMWARE_HEX=$(TEST_DIR)/firmware/timer_demo.hex MODULE=test_firmware TESTCASE=test_timer_demo $(MAKE) -f $(firstword $(MAKEFILE_LIST)) sim
@@ -337,9 +364,7 @@ test-rtl-seeds: require-cocotb
 test-comprehensive-seeds: require-cocotb
 	@for seed in $(RANDOM_SEEDS); do \
 		echo "== test_comprehensive seed $$seed =="; \
-		rm -rf sim_build results.xml; \
-		RANDOM_SEED=$$seed MODULE=test_comprehensive $(MAKE) -f $(firstword $(MAKEFILE_LIST)) sim || exit $$?; \
-		$(MAKE) -f $(firstword $(MAKEFILE_LIST)) check-results || exit $$?; \
+		RANDOM_SEED=$$seed $(MAKE) -f $(firstword $(MAKEFILE_LIST)) test-comprehensive || exit $$?; \
 	done
 
 test-firmware-seeds: require-cocotb

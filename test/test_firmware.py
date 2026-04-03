@@ -107,6 +107,21 @@ async def test_uart_loopback(dut):
 
 
 @cocotb.test()
+async def test_uart_loopback_stress(dut):
+    """Drive 16 sequential bytes through RX and verify all echo back on TX."""
+    _expect_firmware("uart_loopback.hex")
+    await start_clock(dut)
+    await reset_dut(dut, latency=1, use_qspi_model=True)
+    await wait_for_boot_activity(dut)
+    test_bytes = [0x00, 0x01, 0x55, 0xAA, 0xFF, 0x80, 0x7F, 0x42,
+                  0xDE, 0xAD, 0xBE, 0xEF, 0x0F, 0xF0, 0x12, 0x34]
+    for i, val in enumerate(test_bytes):
+        await drive_uart_rx_byte(dut, val)
+        echoed = await capture_uart_byte(dut)
+        assert echoed == val, f"Byte {i}: sent 0x{val:02X}, got 0x{echoed:02X}"
+
+
+@cocotb.test()
 async def test_timer_demo(dut):
     _expect_firmware("timer_demo.hex")
     await start_clock(dut)
