@@ -37,8 +37,11 @@ jobs:
 
       - name: Install sky130 PDK
         uses: TinyTapeout/ciel-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           pdk_name: sky130A
+          pdk_version: 8afc8346a57fe1ab7934ba5a6056ea8b43078e71
           pdk_root: /home/runner/pdk
 
       - name: Set PDK environment
